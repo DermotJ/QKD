@@ -153,7 +153,12 @@ class AliceProtocol(NodeProtocol):
                     print("Meas_res",meas_results)
                     self.matchList=Compare_measurement(1,self.stateList,meas_results)
                     print(self.matchList)
-                    self.node.ports["cout_bob"].tx_output(self.matchList)
+                    if 0 in self.matchList or 1 in self.matchList:
+                        self.node.ports["cout_bob"].tx_output(self.matchList)
+                    else:
+                        print("ERROR")
+                        self.node.ports["cout_bob"].tx_output("ERROR")
+                        exit(1)
                     print("ALICE: SENT MATCH LIST")
                     yield self.await_port_input(self.node.ports["cin_bob"])
                     for i in self.matchList:
@@ -200,10 +205,9 @@ class BobProtocol(NodeProtocol):
             yield(self.await_port_input(self.node.ports["cin_alice"]))
             print("BOB: RECEIVED MATCH LIST")
             matchList=self.node.ports["cin_alice"].rx_input().items
-            self.node.ports["cout_alice"].tx_output("got")
             for i in matchList:
                 if len(matchList)>0:
-                    self.key_B.append(self.result[i]%2)
+                    self.key_B.append(self.result[int(i)][0])
             print(self.key_B)
         print("END OF BOB PROTOCOL")
 
