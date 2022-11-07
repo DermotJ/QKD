@@ -25,13 +25,6 @@ class ClassicalConnectionA2B(Connection):
             self.ports['A'].forward_input(self.subcomponents["Channel_A2B"].ports['send'])
             self.subcomponents["Channel_A2B"].ports['recv'].forward_output(self.ports['B'])
 
-class ClassicalConnectionB2A(Connection):
-        def __init__(self, length):
-            super().__init__(name="ClassicalConnection")
-            self.add_subcomponent(ClassicalChannel("Channel_B2A", length=length,models={"delay_model": FibreDelayModel()}))
-            self.ports['A'].forward_input(self.subcomponents["Channel_B2A"].ports['send'])
-            self.subcomponents["Channel_B2A"].ports['recv'].forward_output(self.ports['A'])
-
 class EntanglingConnection(Connection):
         def __init__(self, length, source_frequency):
                 super().__init__(name="EntanglingConnection")
@@ -50,9 +43,11 @@ class EntanglingConnection(Connection):
 def example_network_setup(node_distance=4e-3, depolar_rate=1e7):
     # Setup nodes Alice and Bob with quantum memories:
     noise_model = DepolarNoiseModel(depolar_rate=depolar_rate)
-    alice = Node("Alice", port_names=['qin_charlie', 'cout_bob','cin_bob'],qmemory=QuantumMemory("AliceMemory", num_positions=2,memory_noise_models=[noise_model] * 2))
+    #alice = Node("Alice", port_names=['qin_charlie', 'cout_bob','cin_bob'],qmemory=QuantumMemory("AliceMemory", num_positions=2,memory_noise_models=[noise_model] * 2))
+    alice = Node("Alice", port_names=['qin_charlie', 'cout_bob','cin_bob'],qmemory=QuantumMemory("AliceMemory", num_positions=2))
     alice.ports['qin_charlie'].forward_input(alice.qmemory.ports['qin1'])
-    bob = Node("Bob", port_names=['qin_charlie', 'cin_alice','cout_alice'], qmemory=QuantumMemory("BobMemory", num_positions=1, memory_noise_models=[noise_model]))
+    #bob = Node("Bob", port_names=['qin_charlie', 'cin_alice','cout_alice'], qmemory=QuantumMemory("BobMemory", num_positions=1, memory_noise_models=[noise_model]))
+    bob = Node("Bob", port_names=['qin_charlie', 'cin_alice','cout_alice'], qmemory=QuantumMemory("BobMemory", num_positions=1))
     bob.ports['qin_charlie'].forward_input(bob.qmemory.ports['qin0']) 
     # Setup classical connection between nodes:
     c_conn1 = ClassicalConnectionA2B(length=node_distance)
@@ -79,22 +74,26 @@ def Create_random_qubits(num_bits):
     for i in range(0,num_bits):
         res_state.append(randint(0,3))
     for a,b in zip(res_state, qlist):
+            print(a)
             if   a == 0: # 0 state
                 #print("0",b.qstate.dm)
+                print(ns.qubits.qubitapi.measure(b,observable=Z))
                 pass
             elif a == 1: # 1 state    #X
                 ns.qubits.operate(b,ns.X)
+                print(ns.qubits.qubitapi.measure(b,observable=Z))
                 #print("1",b.qstate.dm)
             elif a == 2: # + state    #H
                 ns.qubits.operate(b,ns.H)
+                print(ns.qubits.qubitapi.measure(b,observable=X))
                 #print("+",b.qstate.dm)
             elif a == 3: # - state    #XH
                 ns.qubits.operate(b,ns.X)
                 ns.qubits.operate(b,ns.H)
+                print(ns.qubits.qubitapi.measure(b,observable=X))
                 #print("-",b.qstate.dm)
             else :
                 print("Create random bits ERROR!!")
-            print(b.name)
     return res_state, qlist
 
 def Compare_measurement(num_bits,stateList,opList):
@@ -112,7 +111,6 @@ def Random_ZX_measure(num_bits,qlist):
     opList = [2]*num_bits
     loc_res_measure=[2]*num_bits
     num=0
-    print(type(qlist))
     for q in qlist:
         rbit = randint(0,3)
         #print(int(q.name))
@@ -120,57 +118,94 @@ def Random_ZX_measure(num_bits,qlist):
         print(type(q))
         opList[num] = rbit
         if rbit==0:
-            loc_res_measure[num]=ns.qubits.qubitapi.measure(q,observable=Z) #measure in standard basis
+            loc_res_measure[num]=ns.qubits.qubitapi.measure(q,observable=X) #measure in standard basis
         elif rbit==1:
-            loc_res_measure[num]=ns.qubits.qubitapi.measure(q,observable=X) #measure in Hadamard basis
+            loc_res_measure[num]=ns.qubits.qubitapi.measure(q,observable=H) #measure in Hadamard basis
         else:
             print("measuring ERROR!!\n")
         num+=1
     return opList,loc_res_measure
 
 class AliceProtocol(NodeProtocol):
-    def __init__(self, node):
+    def __init__(self, node,length):
         super().__init__(node)
-        self.stateList, self.qlist=Create_random_qubits(1)
-        print(self.stateList)
+       # self.stateList, self.qlist=Create_random_qubits(1)
         self.matchList=[]
+        self.length=length
+        self.ent_swap=False
 
     def run(self):
         self.key_A=[]
-        qubitCounter=0
+        self.qubitCounter=0
+        mem_pos = self.node.qmemory.unused_positions[0]
         while True:
-                if qubitCounter<=0:
-                    self.node.qmemory.put(self.qlist[qubitCounter])
+                self.matchFlag=False
+                if self.qubitCounter<self.length:
+                    #Creates new qubit to be teleported
+                    qubit=create_qubits(1,system_name="Q")
+                    #Places in node memory
+                    self.node.qmemory.put(qubit,mem_pos)
+                    state=randint(0,3)
+                    #Random operation
+                    if   state == 0: # 0 state
+                        pass
+                    elif state == 1: # 1 state    #X
+                        self.node.qmemory.operate(ns.X,mem_pos)
+                    elif state == 2: # + state    #H
+                        self.node.qmemory.operate(ns.H,mem_pos)
+                    elif state == 3: # - state    #XH
+                        self.node.qmemory.operate(ns.X,mem_pos)
+                        self.node.qmemory.operate(ns.H,mem_pos)
+                    else :
+                        print("Create random bits ERROR!!")
                     print("ALICE: Waiting for Entanglement")
+                    #Waits for entanglement
                     yield self.await_port_input(self.node.ports["qin_charlie"])
+                    #Completes Entanglement and does Bell Measurement
+                    self.node.qmemory.operate(ns.CNOT, [0, 1])
+                    self.node.qmemory.operate(ns.H,0)
+                    m, _ = self.node.qmemory.measure([0, 1])
+                    #Sends measurement to Bob for correction
+                    self.node.ports["cout_bob"].tx_output(m)
                     print("ALICE: QUBIT ENTANGLED")
-                    qubitCounter+=1
-                elif self.key_A==[]:
                     print("ALICE: WAITING FOR BOB QUBIT STATELIST")
                     yield self.await_port_input(self.node.ports["cin_bob"])
                     print("ALICE: RECEIVED BOB QUBIT STATELIST")
                     meas_results = self.node.ports["cin_bob"].rx_input().items
-                    print("Meas_res",meas_results)
-                    self.matchList=Compare_measurement(1,self.stateList,meas_results)
-                    print(self.matchList)
+                    #Strips buffer from list if one is present
+                    if meas_results.count("")>0:
+                        meas_results.remove("")
+                    statelist=[state]
+                    #Compares bits
+                    self.matchList=Compare_measurement(1,statelist,meas_results)
+                    #Confirms match is found
                     if 0 in self.matchList or 1 in self.matchList:
-                        self.node.ports["cout_bob"].tx_output(self.matchList)
+                        self.matchFlag=True
+                        self.node.ports["cout_bob"].tx_output(self.matchFlag)
                     else:
                         print("ERROR")
-                        self.node.ports["cout_bob"].tx_output("ERROR")
-                        exit(1)
+                        self.node.ports["cout_bob"].tx_output(self.matchFlag)
                     print("ALICE: SENT MATCH LIST")
+                    if self.matchFlag:
+                        print("ALICE: MATCH FOUND")
+                        self.key_A.append(state%2) #quantum state 0,+:0    1,-:1
+                        self.qubitCounter+=1
+                    print("ALICE:WAITING FOR BOB TO FINISH PROCESS")
                     yield self.await_port_input(self.node.ports["cin_bob"])
-                    for i in self.matchList:
-                        self.key_A.append(self.stateList[i]%2) #quantum state 0,+:0    1,-:1
-                    print(self.key_A)
+                    yield_forNextEnt = self.node.ports["cin_bob"].rx_input().items 
+                    print(f"ALICE: Key Length={self.qubitCounter}")
+                else:
+                    print(f"{ns.sim_time():.1f}")
+                    break
+        print(f"Key at Alice: {self.key_A}")
         print("END OF ALICE PROTOCOL")
 
             
         
 class BobProtocol(NodeProtocol):
-    def __init__(self,node):
+    def __init__(self,node,length):
         super().__init__(node)
+        self.length=length
         self.qubitCounter=0
         self.stateList=[]
         self.result=[]
@@ -179,60 +214,63 @@ class BobProtocol(NodeProtocol):
         self.tempQubit=create_qubits(1,system_name="Q")
     def run(self):
         while True:
-            if self.qubitCounter<=0 and self.is_connected:
+            if self.qubitCounter<length and self.is_connected:
+                self.node.ports["cout_alice"].tx_output([])
                 print("BOB:Waiting for Entanglement")
+                #Waiting for entanglement control qubit
                 yield self.await_port_input(self.node.ports["qin_charlie"])
+                #Waiting for Alice Bell Measurements for Corrections
+                yield(self.await_port_input(self.node.ports["cin_alice"]))
+                meas_results = self.node.ports["cin_alice"].rx_input().items
+                #Correction of teleported qubit
+                if meas_results[0]:
+                    self.node.qmemory.operate(ns.Z, 0)
+                if meas_results[1]:
+                    self.node.qmemory.operate(ns.X, 0)
                 print("BOB:QUBIT ENTANGLED")
+                #Redording Fidelity strength
+                fidelity = ns.qubits.fidelity(self.node.qmemory.peek(0)[0],ns.y0, squared=True)
+                print(f"{ns.sim_time():.1f}: Bob received entangled qubit and " f"corrections! Fidelity = {fidelity:.3f}")
                 r=randint(0,1)
-                print(r)
+                #Completeing random measure of qubit
                 if r == 0:
-                    self.result.append(self.node.qmemory.measure(observable=ns.Z))
+                    self.result=self.node.qmemory.measure(observable=Z)
                 elif r==1:
-                    self.result.append(self.node.qmemory.measure(observable=ns.X))
-                print(self.result)
-                self.B_basis.append(r)
-                self.qubitCounter+=1
-            #elif self.key_B==[]:
-                #B_basis,randomLocMeas=Random_ZX_measure(5,self.stateList)
-            if self.B_basis[0] == 0 or self.B_basis[0] == 1 or self.B_basis[0] == 2:
-                # B send measurement
-                print("BOB:SENDING STATE LIST")
-                self.node.ports["cout_alice"].tx_output(self.B_basis)
-            else :
-                print("B measuring failed!!")
-                print(self.B_basis[0])
-            print("BOB: WAITING FOR MATCH LIST") 
-            yield(self.await_port_input(self.node.ports["cin_alice"]))
-            print("BOB: RECEIVED MATCH LIST")
-            matchList=self.node.ports["cin_alice"].rx_input().items
-            for i in matchList:
-                if len(matchList)>0:
-                    self.key_B.append(self.result[int(i)][0])
-            print(self.key_B)
+                    self.result=self.node.qmemory.measure(observable=X)
+                self.B_basis=r
+                if self.B_basis == 0 or self.B_basis == 1 or self.B_basis == 2:
+                    # B send measurement
+                    print("BOB:SENDING STATE LIST")
+                    self.node.ports["cout_alice"].tx_output(self.B_basis)
+                else :
+                    print("B measuring failed!!")
+                    print(self.B_basis[0])
+                print("BOB: WAITING FOR MATCH LIST") 
+                #Waiting for  Match list from Alice
+                yield(self.await_port_input(self.node.ports["cin_alice"]))
+                print("BOB: RECEIVED MATCH LIST")
+                matchList=self.node.ports["cin_alice"].rx_input().items
+                print(f"BOB:match {matchList}")
+                if matchList[0]:
+                    print("BOB: MATCH FOUND!")
+                    self.key_B.append(self.result[int(0)][0])
+                    self.qubitCounter+=1
+                else:
+                    print("BOB: MATCH NOT FOUND")
+                #Sending buffer to inform Alice Bob is ready for next bit
+                self.node.ports["cout_alice"].tx_output("")
+                print(f"BOB:Key Length = {self.qubitCounter}")
+            else:
+                print(f"{ns.sim_time():.1f}")
+                break
+        print(f"Key at BOB: {self.key_B}")
         print("END OF BOB PROTOCOL")
-
-
-
-        
-
+print("Please input length of key:")
+length= int(input())
 ns.set_qstate_formalism(ns.QFormalism.DM)
-#node_distance=4e-3
 alice, bob, qconn = example_network_setup()
-#cchannel1=ClassicalChannel(name="cchannel[Alice|Bob]",length=node_distance)
-#cchannel2=ClassicalChannel(name="cchannel[Bob|Alice]",length=node_distance)
-#cconnection = DirectConnection(name="cconn[Alice|Bob]",channel_AtoB=cchannel1, channel_BtoA=cchannel2)
-#alice.connect_to(remote_node=bob, connection=cconnection, local_port_name="cport", remote_port_name="cport")
-aliceProtocol=AliceProtocol(alice).start()
-bobProtocol=BobProtocol(bob).start()
+aliceProtocol=AliceProtocol(alice,length).start()
+bobProtocol=BobProtocol(bob,length).start()
 
-stats = ns.sim_run(300)
+stats = ns.sim_run(60000)
 
-#qA, = alice.qmemory.peek(positions=[1])
-#
-#qB, = bob.qmemory.peek(positions=[0])
-#
-#qA, qB
-#
-#fidelity = ns.qubits.fidelity([qA, qB], ns.b00)
-#
-#print(f"Entangled fidelity (after 5 ns wait) = {fidelity:.3f}")
