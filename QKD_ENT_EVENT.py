@@ -1,5 +1,6 @@
 #! usr/bin/python3
-import netsquid as ns 
+import netsquid as ns
+import sys
 from random import randint
 from netsquid.components.qchannel import QuantumChannel
 from netsquid.components import QuantumMemory
@@ -81,7 +82,7 @@ class qubitCreation(NodeProtocol):
             mem_pos = self.node.qmemory.unused_positions[0]
         except:
             self.send_signal(signal_label=Signals.FAIL)
-            print("Failed to get unused memory locations")
+           # print("Failed to get unused memory locations")
             self.node.qmemory.discard(0)
             mem_pos = self.node.qmemory.unused_positions[0]
         qubit=create_qubits(1,system_name="Q")
@@ -198,12 +199,12 @@ class AliceProtocol(NodeProtocol):
                 else:
                     print(f"{ns.sim_time():.1f}")
                     break
-        print(f"Key at Alice: {self.key_A}")
-        print("END OF ALICE PROTOCOL")
+        #print(f"Key at Alice: {self.key_A}")
+        #print("END OF ALICE PROTOCOL")
+        ns.sim_stop()
 
     def start(self):
         super().start()
-        #self.start_subprotocols()
             
         
 class BobProtocol(NodeProtocol):
@@ -215,6 +216,8 @@ class BobProtocol(NodeProtocol):
         self.result=[]
         self.B_basis=[]
         self.key_B=[]
+        self.entanglements=0
+
     def run(self):
         entangled=False
         meas_results=None
@@ -234,6 +237,7 @@ class BobProtocol(NodeProtocol):
                 #Correction of teleported qubit
                 else:
                     #expression.reprime()
+                    self.entanglements += 1
                     entangled=True
                     #evexpr_port_c.reprime()
                 if meas_results is not None and entangled:
@@ -244,7 +248,7 @@ class BobProtocol(NodeProtocol):
                     #print("BOB:QUBIT ENTANGLED")
                     #Redording Fidelity strength
                     fidelity = ns.qubits.fidelity(self.node.qmemory.peek(0)[0],ns.y0, squared=True)
-                    print(f"{ns.sim_time():.1f}: Bob received entangled qubit and " f"corrections! Fidelity = {fidelity:.3f}")
+                   # print(f"{ns.sim_time():.1f}: Bob received entangled qubit and " f"corrections! Fidelity = {fidelity:.3f}")
                     r=randint(0,1)
                     #Completeing random measure of qubit
                     if r == 0:
@@ -271,8 +275,8 @@ class BobProtocol(NodeProtocol):
                         self.qubitCounter+=1
                         #meas_results=None
                         #entangled=False
-                    else:
-                        print("BOB: MATCH NOT FOUND")
+                    #else:
+                        #print("BOB: MATCH NOT FOUND")
                     #Sending buffer to inform Alice Bob is ready for next bit
                     self.node.ports["cout_alice"].tx_output("")
                     #print(f"BOB:Key Length = {self.qubitCounter}")
@@ -282,18 +286,18 @@ class BobProtocol(NodeProtocol):
                     #evexpr_port_c.reprime()
                     #expression.reprime()
             else:
-                print(f"{ns.sim_time():.1f}")
+               # print(f"{ns.sim_time():.1f}")
                 break
-        print(f"Key at BOB: {self.key_B}")
-        print("END OF BOB PROTOCOL")
-print("Please input length of key:")
-length= int(input())
+        #print(f"Key at BOB: {self.key_B}")
+        print(self.entanglements)
+        #print("END OF BOB PROTOCOL")
+#print("Please input length of key:")
+length= int(sys.argv[1])
 ns.set_qstate_formalism(ns.QFormalism.DM)
 alice, bob, qconn = example_network_setup()
 createQubits=qubitCreation(alice)
 aliceProtocol=AliceProtocol(alice,length,createQubits).start()
 bobProtocol=BobProtocol(bob,length).start()
-
 stats = ns.sim_run(6000000000)
 
 

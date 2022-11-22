@@ -86,11 +86,12 @@ class AliceProtocol(NodeProtocol):
 
     def run(self):
         self.key_A=[]
+        self.state=[]
         self.qubitCounter=0
         mem_pos = self.node.qmemory.unused_positions[0]
         while True:
                 self.matchFlag=False
-                if self.qubitCounter<self.length:
+                if self.qubitCounter<self.length*3:
                     #Creates new qubit to be teleported
                     qubit=create_qubits(1,system_name="Q")
                     #Places in node memory
@@ -108,6 +109,7 @@ class AliceProtocol(NodeProtocol):
                         self.node.qmemory.operate(ns.H,mem_pos)
                     else :
                         print("Create random bits ERROR!!")
+                    self.state.append(state)
                     #print("ALICE: Waiting for Entanglement")
                     #Waits for entanglement
                     yield self.await_port_input(self.node.ports["qin_charlie"])
@@ -117,39 +119,31 @@ class AliceProtocol(NodeProtocol):
                     m, _ = self.node.qmemory.measure([0, 1])
                     #Sends measurement to Bob for correction
                     self.node.ports["cout_bob"].tx_output(m)
+                    self.qubitCounter+=1
                     #print("ALICE: QUBIT ENTANGLED")
                     #print("ALICE: WAITING FOR BOB QUBIT STATELIST")
+                else:
                     yield self.await_port_input(self.node.ports["cin_bob"])
                     #print("ALICE: RECEIVED BOB QUBIT STATELIST")
                     meas_results = self.node.ports["cin_bob"].rx_input().items
                     #Strips buffer from list if one is present
                     if meas_results.count("")>0:
                         meas_results.remove("")
-                    statelist=[state]
                     #Compares bits
-                    self.matchList=Compare_measurement(1,statelist,meas_results)
+                    self.matchList=Compare_measurement(self.length*3,self.state,meas_results)
                     #Confirms match is found
-                    if 0 in self.matchList or 1 in self.matchList:
-                        self.matchFlag=True
-                        self.node.ports["cout_bob"].tx_output(self.matchFlag)
-                    else:
-                        #print("ERROR")
-                        self.node.ports["cout_bob"].tx_output(self.matchFlag)
+                    self.node.ports["cout_bob"].tx_output(self.matchList)
                     #print("ALICE: SENT MATCH LIST")
-                    if self.matchFlag:
+                    for j in self.matchList:
                         #print("ALICE: MATCH FOUND")
-                        self.key_A.append(state%2) #quantum state 0,+:0    1,-:1
-                        self.qubitCounter+=1
+                        if len(self.key_A)<self.length:
+                            self.key_A.append(self.state[j]%2) #quantum state 0,+:0    1,-:1
                     #print("ALICE:WAITING FOR BOB TO FINISH PROCESS")
-                    yield self.await_port_input(self.node.ports["cin_bob"])
-                    yield_forNextEnt = self.node.ports["cin_bob"].rx_input().items 
-                    #print(f"ALICE: Key Length={self.qubitCounter}")
-                else:
+                    #print(f"ALICE: Key Length={self.qubitCounter}
                     print(f"{ns.sim_time():.1f}")
                     break
         #print(f"Key at Alice: {self.key_A}")
         #print("END OF ALICE PROTOCOL")
-        ns.sim_stop()
 
             
         
@@ -167,7 +161,7 @@ class BobProtocol(NodeProtocol):
 
     def run(self):
         while True:
-            if self.qubitCounter<length and self.is_connected:
+            if self.qubitCounter<length*3 and self.is_connected:
                 self.node.ports["cout_alice"].tx_output([])
                 #print("BOB:Waiting for Entanglement")
                 #Waiting for entanglement control qubit
@@ -188,11 +182,13 @@ class BobProtocol(NodeProtocol):
                 r=randint(0,1)
                 #Completeing random measure of qubit
                 if r == 0:
-                    self.result=self.node.qmemory.measure(observable=Z)
+                    self.result.append(self.node.qmemory.measure(observable=Z))
                 elif r==1:
-                    self.result=self.node.qmemory.measure(observable=X)
-                self.B_basis=r
-                if self.B_basis == 0 or self.B_basis == 1 or self.B_basis == 2:
+                    self.result.append(self.node.qmemory.measure(observable=X))
+                self.B_basis.append(r)
+                self.qubitCounter+=1
+            else:
+                if self.B_basis[1] == 0 or self.B_basis[1] == 1 or self.B_basis[1] == 2:
                     # B send measurement
                     #print("BOB:SENDING STATE LIST")
                     self.node.ports["cout_alice"].tx_output(self.B_basis)
@@ -204,21 +200,13 @@ class BobProtocol(NodeProtocol):
                 yield(self.await_port_input(self.node.ports["cin_alice"]))
                 #print("BOB: RECEIVED MATCH LIST")
                 matchList=self.node.ports["cin_alice"].rx_input().items
-                #print(f"BOB:match {matchList}")
-                if matchList[0]:
-                    #print("BOB: MATCH FOUND!")
-                    self.key_B.append(self.result[int(0)][0])
-                    self.qubitCounter+=1
-                #else:
-                    #print("BOB: MATCH NOT FOUND")
-                #Sending buffer to inform Alice Bob is ready for next bit
-                self.node.ports["cout_alice"].tx_output("")
-                #print(f"BOB:Key Length = {self.qubitCounter}")
-            else:
-               # print(f"{ns.sim_time():.1f}")
+                for j in matchList:
+                    if len(self.key_B)<self.length:
+                        self.key_B.append(self.result[int(j)][0])
                 break
-       # print(f"Key at BOB: {self.key_B}")
+        #print(f"Key at BOB: {self.key_B}")
         print(self.entanglements)
+        ns.sim_stop()
         #print("END OF BOB PROTOCOL")
 #print("Please input length of key:")
 length= int(sys.argv[1])
