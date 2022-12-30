@@ -20,18 +20,18 @@ class Alice(Agent):
             bob_should_apply_z = q.measure() # if Bob should apply Z
             self.csend(bob, [bob_should_apply_x, bob_should_apply_z])
             
-    def random_state(self):
+    def random_state(self,q):
             state=randint(0,3)
             #Random operation
             if  state == 0: # 0 state
                 pass
             elif state == 1: # 1 state    #X
-                X(self.q)
+                X(q)
             elif state == 2: # + state    #H
-                H(self.q)
+                H(q)
             elif state == 3: # - state    #XH
-                X(self.q)
-                H(self.q)
+                X(q)
+                H(q)
             else :
                 print("Create random bits ERROR!!")
             self.state = state
@@ -50,10 +50,10 @@ class Alice(Agent):
         self.state = None
         self.key_Alice = []
         for qsystem in self.qstream:
-                self.q, self.a, self.b = qsystem.qubits # q is state to teleport, a and b are Bell pair
-                self.random_state()
-                self.distribute_bell_pair(self.a, self.b)
-                self.teleport(self.q, self.a)
+                q, a, b = qsystem.qubits # q is state to teleport, a and b are Bell pair
+                self.random_state(q)
+                self.distribute_bell_pair(a, b)
+                self.teleport(q, a)
                 op_bob = self.crecv(bob)
                 match = compare_measurement(op_bob)
                 csend(match)
