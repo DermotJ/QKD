@@ -2,6 +2,7 @@
 import os
 import sys
 from squanch import *
+from random import randint
 class Alice(Agent):
     
     def distribute_bell_pair(self, a, b):
