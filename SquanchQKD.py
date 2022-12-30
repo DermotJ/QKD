@@ -92,7 +92,8 @@ class Bob(Agent):
         #print(self.key_bob)
                     
 if __name__ == '__main__':                    
-    qstream=QSystem(3,20)        
+    qstream=QSystem(3,20)    
+    print(qstream.state)
     # Make and connect the agents
 
     out = Agent.shared_output()
