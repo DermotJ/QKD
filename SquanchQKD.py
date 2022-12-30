@@ -47,7 +47,7 @@ class Alice(Agent):
         self.key_Alice = []
         for qsystem in self.qstream:
                 self.q, self.a, self.b = qsystem.qubits # q is state to teleport, a and b are Bell pair
-                random_state()
+                self.random_state()
                 self.distribute_bell_pair(self.a, self.b)
                 self.teleport(self.q, self.a)
                 op_bob = self.crecv(bob)
