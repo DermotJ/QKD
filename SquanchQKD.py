@@ -1,8 +1,10 @@
 #! usr/bin/python3
 import os
 import sys
+import numpy as np
 from squanch import *
 from random import randint
+
 class Alice(Agent):
     
     def distribute_bell_pair(self, a, b):
@@ -34,7 +36,7 @@ class Alice(Agent):
                 H(q)
             else :
                 print("Create random bits ERROR!!")
-            self.state = state
+            return state
             
     def compare_measurement(self,opList):
         
@@ -50,28 +52,34 @@ class Alice(Agent):
         self.state = None
         self.key_Alice = []
         for qsystem in self.qstream:
+                #self.state=self.random_state(qsystem.qubit(0))
+                print(qsystem.state)
                 q, a, b = qsystem.qubits # q is state to teleport, a and b are Bell pair
-                self.random_state(q)
+                self.state=self.random_state(q)
+                print(self.state)
+                print(qsystem.state)
                 self.distribute_bell_pair(a, b)
                 self.teleport(q, a)
                 op_bob = self.crecv(bob)
-                match = compare_measurement(op_bob)
-                csend(match)
+                match = self.compare_measurement(op_bob)
+                self.csend(bob, match)
                 if match:
-                    self.key_A.append(self.state%2) #quantum state 0,+:0    1,-:1    
+                    self.key_Alice.append(self.state%2) #quantum state 0,+:0    1,-:1    
                 else:
                     continue
-        #print(self.key_Alice)
+        print("Alice:",self.key_Alice)
                     
         
 class Bob(Agent):
     def random_measure(self, b):
         measure_for=randint(0,1)
         if measure_for == 0:
-            X(b)
+            meas = b.measure(Z)
         else:
-            Z(b)    
-        return b.measure(), measure_for
+            meas = b.measure(X)
+        meas=b.measure()
+        print(meas, measure_for)
+        return meas, measure_for
 
             
     def run(self):
@@ -83,25 +91,26 @@ class Bob(Agent):
                 should_apply_x, should_apply_z = self.crecv(alice)
                 if should_apply_x: X(b)
                 if should_apply_z: Z(b)
-                meas_result, state = random_measure(b)
+                meas_result, state = self.random_measure(b)
                 self.csend(alice, state)
-                if self.crecv(alice):
+                match = self.crecv(alice)
+                print(b)
+                if match == 1:
+                    print("Appending")
                     self.key_bob.append(meas_result)
                 else:
                     continue
-        #print(self.key_bob)
-                    
-if __name__ == '__main__':                    
-    qstream=QSystem(3,20)    
-    print(qstream.state)
-    # Make and connect the agents
+        print("Bob:",self.key_bob)
+                               
+qstream=QStream(3,10)    
+# Make and connect the agents
+out = Agent.shared_output()
+alice = Alice(qstream, out)
+bob = Bob(qstream, out)
+alice.qconnect(bob) # add a quantum channel
+alice.cconnect(bob) # add a classical channel
+bob.start()
+alice.start()
+alice.join()
+bob.join()
 
-    out = Agent.shared_output()
-    alice = Alice(qstream, out)
-    bob = Bob(qstream, out)
-    alice.qconnect(bob) # add a quantum channel
-    alice.cconnect(bob) # add a classical channel
-    bob.start()
-    alice.start()
-    alice.join()
-    bob.join()
